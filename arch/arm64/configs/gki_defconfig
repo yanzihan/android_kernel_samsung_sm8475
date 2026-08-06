@@ -736,12 +736,10 @@ CONFIG_CRYPTO_SHA1_ARM64_CE=y
 CONFIG_CRYPTO_FIPS=y
 
 
-# CONFIG_RKP_TEST is not set
 
 
 
 
-# CONFIG_KDP_TEST is not set
 
 
 
@@ -808,12 +806,10 @@ CONFIG_FIVE=y
 
 
 
-CONFIG_PROCA=y
 
 
 
 
-CONFIG_PROCA_S_OS=y
 
 
 
@@ -833,12 +829,10 @@ CONFIG_FIVE_GKI_10=y
 
 
 
-CONFIG_PROCA_GKI_10=y
 
 
 
 
-CONFIG_GAF_V6=y
 
 
 
