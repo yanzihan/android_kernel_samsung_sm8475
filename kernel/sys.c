@@ -74,7 +74,6 @@
 #include <asm/io.h>
 #include <asm/unistd.h>
 
-
 #include "uid16.h"
 
 #include <trace/hooks/sys.h>
@@ -847,7 +846,6 @@ long __sys_setfsuid(uid_t uid)
 	if (!new)
 		return old_fsuid;
 
-
 	if (uid_eq(kuid, old->uid)  || uid_eq(kuid, old->euid)  ||
 	    uid_eq(kuid, old->suid) || uid_eq(kuid, old->fsuid) ||
 	    ns_capable_setid(old->user_ns, CAP_SETUID)) {
@@ -891,7 +889,6 @@ long __sys_setfsgid(gid_t gid)
 	new = prepare_creds();
 	if (!new)
 		return old_fsgid;
-
 
 	if (gid_eq(kgid, old->gid)  || gid_eq(kgid, old->egid)  ||
 	    gid_eq(kgid, old->sgid) || gid_eq(kgid, old->fsgid) ||
@@ -2126,7 +2123,7 @@ static int prctl_set_auxv(struct mm_struct *mm, unsigned long addr,
 	BUILD_BUG_ON(sizeof(user_auxv) != sizeof(mm->saved_auxv));
 
 	task_lock(current);
-	memcpy(mm->saved_auxv, user_auxv, sizeof(user_auxv));
+	memcpy(mm->saved_auxv, user_auxv, len);
 	task_unlock(current);
 
 	return 0;

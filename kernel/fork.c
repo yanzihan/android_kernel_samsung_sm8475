@@ -112,11 +112,6 @@
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/sched.h>
 
-
-#ifdef CONFIG_KDP_CRED
-#include <linux/kdp.h>
-#endif
-
 #ifdef CONFIG_PROC_FSLOG
 #include <linux/fslog.h>
 #endif
@@ -1108,9 +1103,6 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 #endif
 	mm_init_uprobes_state(mm);
 	hugetlb_count_init(mm);
-#ifdef CONFIG_FUTEX
-	atomic64_set(&mm->futex_unique_id, 0);
-#endif
 
 	if (current->mm) {
 		mm->flags = current->mm->flags & MMF_INIT_MASK;
@@ -2089,18 +2081,6 @@ static __latent_entropy struct task_struct *copy_process(
 			return ERR_PTR(-EINVAL);
 	}
 
-	if (clone_flags & CLONE_AUTOREAP) {
-		if (clone_flags & CLONE_THREAD)
-			return ERR_PTR(-EINVAL);
-		if (clone_flags & CLONE_PARENT)
-			return ERR_PTR(-EINVAL);
-		if (args->exit_signal)
-			return ERR_PTR(-EINVAL);
-	}
-
-	if ((clone_flags & CLONE_PARENT) && current->signal->autoreap)
-		return ERR_PTR(-EINVAL);
-
 	/*
 	 * Force any signals received before this point to be delivered
 	 * before the fork happens.  Collect up signals sent to multiple
@@ -2470,8 +2450,6 @@ static __latent_entropy struct task_struct *copy_process(
 			 */
 			p->signal->has_child_subreaper = p->real_parent->signal->has_child_subreaper ||
 							 p->real_parent->signal->is_child_subreaper;
-			if (clone_flags & CLONE_AUTOREAP)
-				p->signal->autoreap = 1;
 			list_add_tail(&p->sibling, &p->real_parent->children);
 			list_add_tail_rcu(&p->tasks, &init_task.tasks);
 			attach_pid(p, PIDTYPE_TGID);
@@ -2510,10 +2488,6 @@ static __latent_entropy struct task_struct *copy_process(
 
 	copy_oom_score_adj(clone_flags, p);
 
-#ifdef CONFIG_KDP_CRED
-	if (kdp_enable)
-		kdp_assign_pgd(p);
-#endif
 	return p;
 
 bad_fork_cancel_cgroup:
@@ -2901,8 +2875,7 @@ static bool clone3_args_valid(struct kernel_clone_args *kargs)
 {
 	/* Verify that no unknown flags are passed along. */
 	if (kargs->flags &
-	    ~(CLONE_LEGACY_FLAGS | CLONE_CLEAR_SIGHAND | CLONE_INTO_CGROUP |
-	      CLONE_AUTOREAP))
+	    ~(CLONE_LEGACY_FLAGS | CLONE_CLEAR_SIGHAND | CLONE_INTO_CGROUP))
 		return false;
 
 	/*
@@ -3088,7 +3061,7 @@ static int unshare_fs(unsigned long unshare_flags, struct fs_struct **new_fsp)
 		return 0;
 
 	/* don't need lock here; in the worst case we'll do useless copy */
-	if (!(unshare_flags & CLONE_NEWNS) && fs->users == 1)
+	if (fs->users == 1)
 		return 0;
 
 	*new_fsp = copy_fs_struct(fs);

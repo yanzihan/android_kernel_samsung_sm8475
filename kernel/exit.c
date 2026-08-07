@@ -118,7 +118,6 @@ static __init int kernel_exit_sysfs_init(void)
 late_initcall(kernel_exit_sysfs_init);
 #endif
 
-
 #if defined(CONFIG_MEMORY_ZEROISATION)
 #include <trace/hooks/mz.h>
 #endif
@@ -207,13 +206,7 @@ static void __exit_signal(struct task_struct *tsk)
 	 * doing sigqueue_free() if we have SIGQUEUE_PREALLOC signals.
 	 */
 	flush_sigqueue(&tsk->pending);
-
-	/*
-	 * Ensure that all preceeding state is visible. Pairs with
-	 * the smp_acquire__after_ctrl_dep() in the sighand == NULL
-	 * path of lock_task_sighand().
-	 */
-	smp_store_release(&tsk->sighand, NULL);
+	tsk->sighand = NULL;
 	spin_unlock(&sighand->siglock);
 
 	__cleanup_sighand(sighand);
@@ -541,7 +534,6 @@ static void exit_mm(void)
 	BUG_ON(mm != current->active_mm);
 	/* more a memory barrier than a real lock */
 	task_lock(current);
-	current->user_dumpable = (get_dumpable(mm) == SUID_DUMP_USER);
 	current->mm = NULL;
 	mmap_read_unlock(mm);
 	enter_lazy_tlb(mm, current);
@@ -789,7 +781,6 @@ void __noreturn do_exit(long code)
 	 * Then fix up important state like USER_DS and preemption.
 	 * Then do everything else.
 	 */
-
 
 	WARN_ON(blk_needs_flush_plug(tsk));
 

@@ -195,7 +195,6 @@ obj-$(CONFIG_MOST)		+= most/
 obj-$(CONFIG_SPU_VERIFY)        += spu_verify/
 obj-y				+= switch/
 obj-y                          += samsung/
-obj-$(CONFIG_UH)		+= uh/
 obj-y += battery/charger/max77705_charger/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += regulator/pmic_class/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += battery/core/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT

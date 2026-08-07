@@ -74,7 +74,6 @@
 
 #include <trace/events/sched.h>
 
-
 EXPORT_TRACEPOINT_SYMBOL_GPL(task_rename);
 
 static int bprm_creds_from_file(struct linux_binprm *bprm);
@@ -879,7 +878,7 @@ int transfer_args_to_stack(struct linux_binprm *bprm,
 	stop = bprm->p >> PAGE_SHIFT;
 	sp = *sp_location;
 
-	for (index = MAX_ARG_PAGES; index-- > stop; ) {
+	for (index = MAX_ARG_PAGES - 1; index >= stop; index--) {
 		unsigned int offset = index == stop ? bprm->p & ~PAGE_MASK : 0;
 		char *src = kmap(bprm->page[index]) + offset;
 		sp -= PAGE_SIZE - offset;
@@ -932,7 +931,7 @@ static struct file *do_open_execat(int fd, struct filename *name, int flags)
 	    path_noexec(&file->f_path))
 		goto exit;
 
-	err = exe_file_deny_write_access(file);
+	err = deny_write_access(file);
 	if (err)
 		goto exit;
 
@@ -1029,10 +1028,6 @@ static int exec_mmap(struct mm_struct *mm)
 		local_irq_enable();
 	tsk->mm->vmacache_seqnum = 0;
 	vmacache_flush(tsk);
-#ifdef CONFIG_KDP_CRED
-	if (kdp_enable)
-		uh_call(UH_APP_KDP, SET_CRED_PGD, (u64)current_cred(), (u64)mm->pgd, 0, 0);
-#endif
 	task_unlock(tsk);
 	if (old_mm) {
 		mmap_read_unlock(old_mm);
@@ -1270,20 +1265,6 @@ int begin_new_exec(struct linux_binprm * bprm)
 		goto out;
 
 	/*
-	 * We have to apply CLOEXEC before we change whether the process is
-	 * dumpable (in setup_new_exec) to avoid a race with a process in userspace
-	 * trying to access the should-be-closed file descriptors of a process
-	 * undergoing exec(2).
-	 *
-	 * This can block on filesystem ->flush() handlers, including waiting
-	 * for FUSE daemons, so do it before exec_mmap takes the
-	 * exec_update_lock.
-	 * This must happen after the point of no return, and after unsharing
-	 * the FD table.
-	 */
-	do_close_on_exec(me->files);
-
-	/*
 	 * Must be called _before_ exec_mmap() as bprm->mm is
 	 * not visibile until then. This also enables the update
 	 * to be lockless.
@@ -1330,6 +1311,14 @@ int begin_new_exec(struct linux_binprm * bprm)
 					PF_NOFREEZE | PF_NO_SETAFFINITY);
 	flush_thread();
 	me->personality &= ~bprm->per_clear;
+
+	/*
+	 * We have to apply CLOEXEC before we change whether the process is
+	 * dumpable (in setup_new_exec) to avoid a race with a process in userspace
+	 * trying to access the should-be-closed file descriptors of a process
+	 * undergoing exec(2).
+	 */
+	do_close_on_exec(me->files);
 
 	if (bprm->secureexec) {
 		/* Make sure parent cannot signal privileged process. */
@@ -1493,7 +1482,7 @@ static void free_bprm(struct linux_binprm *bprm)
 		abort_creds(bprm->cred);
 	}
 	if (bprm->file) {
-		exe_file_allow_write_access(bprm->file);
+		allow_write_access(bprm->file);
 		fput(bprm->file);
 	}
 	if (bprm->executable)
@@ -1781,7 +1770,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 		bprm->file = bprm->interpreter;
 		bprm->interpreter = NULL;
 
-		exe_file_allow_write_access(exec);
+		allow_write_access(exec);
 		if (unlikely(bprm->have_execfd)) {
 			if (bprm->executable) {
 				fput(exec);
@@ -2104,29 +2093,6 @@ SYSCALL_DEFINE3(execve,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
-#ifdef CONFIG_KDP_CRED
-	struct filename *path = getname(filename);
-	int error = PTR_ERR(path);
-
-	if (IS_ERR(path))
-		return error;
-
-	if (kdp_enable) {
-		uh_call(UH_APP_KDP, MARK_PPT, (u64)path->name, (u64)current, 0, 0);
-		if (current->cred->uid.val == 0 || current->cred->gid.val == 0 ||
-			current->cred->euid.val == 0 || current->cred->egid.val == 0 ||
-			current->cred->suid.val == 0 || current->cred->sgid.val == 0) {
-			if (kdp_restrict_fork(path)) {
-				pr_warn("RKP_KDP Restricted making process. PID = %d(%s) PPID = %d(%s)\n",
-						current->pid, current->comm,
-						current->parent->pid, current->parent->comm);
-				putname(path);
-				return -EACCES;
-			}
-		}
-	}
-	putname(path);
-#endif
 	return do_execve(getname(filename), argv, envp);
 }
 

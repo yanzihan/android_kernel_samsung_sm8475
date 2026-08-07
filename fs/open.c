@@ -36,7 +36,6 @@
 #include "internal.h"
 #include <trace/hooks/syscall_check.h>
 
-
 int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	struct file *filp)
 {
