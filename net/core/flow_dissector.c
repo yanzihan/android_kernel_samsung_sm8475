@@ -1669,6 +1669,28 @@ u32 __skb_get_hash_symmetric(const struct sk_buff *skb)
 EXPORT_SYMBOL_GPL(__skb_get_hash_symmetric);
 
 /**
+ * __skb_get_hash: calculate a flow hash
+ * @skb: sk_buff to calculate flow hash from
+ *
+ * This function calculates a flow hash based on src/dst addresses
+ * and src/dst port numbers.  Sets hash in skb to non-zero hash value
+ * on success, zero indicates no valid hash.  Also, sets l4_hash in skb
+ * if hash is a canonical 4-tuple hash over transport ports.
+ */
+void __skb_get_hash(struct sk_buff *skb)
+{
+	struct flow_keys keys;
+	u32 hash;
+
+	__flow_hash_secret_init();
+
+	hash = ___skb_get_hash(skb, &keys, &hashrnd);
+
+	__skb_set_sw_hash(skb, hash, flow_keys_have_l4(&keys));
+}
+EXPORT_SYMBOL(__skb_get_hash);
+
+/**
  * __skb_get_hash_net: calculate a flow hash
  * @net: associated network namespace, derived from @skb if NULL
  * @skb: sk_buff to calculate flow hash from
