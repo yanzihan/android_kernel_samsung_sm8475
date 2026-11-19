@@ -3738,7 +3738,7 @@ int hci_register_dev(struct hci_dev *hdev)
 		return error;
 	}
 
-	hdev->name = dev_name(&hdev->dev);
+	snprintf(hdev->name, sizeof(hdev->name), "hci%d", id);
 	hdev->id = id;
 
 	BT_DBG("%p name %s bus %d", hdev, hdev->name, hdev->bus);
