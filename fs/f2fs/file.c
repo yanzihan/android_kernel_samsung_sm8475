@@ -1469,14 +1469,11 @@ static int f2fs_collapse_range(struct inode *inode, loff_t offset, loff_t len)
 
 	/* write out all moved pages, if possible */
 	f2fs_down_write(&F2FS_I(inode)->i_mmap_sem);
-	ret = filemap_write_and_wait_range(inode->i_mapping, offset, LLONG_MAX);
-	if (ret)
-		goto out_unlock;
+	filemap_write_and_wait_range(inode->i_mapping, offset, LLONG_MAX);
 	truncate_pagecache(inode, offset);
 
 	new_size = i_size_read(inode) - len;
 	ret = f2fs_truncate_blocks(inode, new_size, true);
-out_unlock:
 	f2fs_up_write(&F2FS_I(inode)->i_mmap_sem);
 	if (!ret)
 		f2fs_i_size_write(inode, new_size);
@@ -1528,10 +1525,8 @@ static int f2fs_do_zero_range(struct dnode_of_data *dn, pgoff_t start,
 		f2fs_set_data_blkaddr(dn);
 	}
 
-	if (index > start) {
-		f2fs_update_read_extent_cache_range(dn, start, 0, index - start);
-		f2fs_update_age_extent_cache_range(dn, start, index - start);
-	}
+	f2fs_update_read_extent_cache_range(dn, start, 0, index - start);
+	f2fs_update_age_extent_cache_range(dn, start, index - start);
 
 	return ret;
 }
@@ -1754,17 +1749,9 @@ static int expand_inode_data(struct inode *inode, loff_t offset,
 		return 0;
 
 	if (f2fs_is_pinned_file(inode)) {
-		block_t sec_blks = CAP_BLKS_PER_SEC(sbi);
-		block_t sec_len;
+		block_t sec_blks = BLKS_PER_SEC(sbi);
+		block_t sec_len = roundup(map.m_len, sec_blks);
 
-		if (map.m_lblk % sec_blks) {
-			pg_start = rounddown(map.m_lblk, sec_blks);
-			map.m_lblk = pg_start;
-			map.m_len = pg_end - pg_start;
-			if (off_end)
-				map.m_len++;
-		}
-		sec_len = roundup(map.m_len, sec_blks);
 		map.m_len = sec_blks;
 next_alloc:
 		if (has_not_enough_free_secs(sbi, 0,
@@ -2861,7 +2848,7 @@ do_more:
 			ret = -EAGAIN;
 		goto out;
 	}
-	range->start += CAP_BLKS_PER_SEC(sbi);
+	range->start += BLKS_PER_SEC(sbi);
 	if (range->start <= end)
 		goto do_more;
 out:
@@ -2986,7 +2973,7 @@ static int f2fs_defragment_range(struct f2fs_sb_info *sbi,
 		goto out;
 	}
 
-	sec_num = DIV_ROUND_UP(total, CAP_BLKS_PER_SEC(sbi));
+	sec_num = DIV_ROUND_UP(total, BLKS_PER_SEC(sbi));
 
 	/*
 	 * make sure there are enough free section for LFS allocation, this can
@@ -3133,6 +3120,8 @@ static int f2fs_move_file_range(struct file *file_in, loff_t pos_in,
 	if (src == dst) {
 		if (pos_in == pos_out)
 			return 0;
+		if (pos_out > pos_in && pos_out < pos_in + len)
+			return -EINVAL;
 	}
 
 	inode_lock(src);
@@ -3152,8 +3141,6 @@ static int f2fs_move_file_range(struct file *file_in, loff_t pos_in,
 		goto out_unlock;
 	if (len == 0)
 		olen = len = src->i_size - pos_in;
-	if (src == dst && pos_out > pos_in && pos_out < pos_in + len)
-		goto out_unlock;
 	if (pos_in + len == src->i_size)
 		len = ALIGN(src->i_size, F2FS_BLKSIZE) - pos_in;
 	if (len == 0) {
@@ -3991,16 +3978,14 @@ static int reserve_compress_blocks(struct dnode_of_data *dn, pgoff_t count)
 		blkcnt_t to_reserved;
 		int ret;
 
-		for (i = 0; i < cluster_size; i++) {
-			blkaddr = data_blkaddr(dn->inode, dn->node_page,
-						dn->ofs_in_node + i);
+		for (i = 0; i < cluster_size; i++, dn->ofs_in_node++) {
+			blkaddr = f2fs_data_blkaddr(dn);
 
 			if (i == 0) {
-				if (blkaddr != COMPRESS_ADDR) {
-					dn->ofs_in_node += cluster_size;
-					goto next;
-				}
-				continue;
+				if (blkaddr == COMPRESS_ADDR)
+					continue;
+				dn->ofs_in_node += cluster_size;
+				goto next;
 			}
 
 			/*
@@ -4016,6 +4001,9 @@ static int reserve_compress_blocks(struct dnode_of_data *dn, pgoff_t count)
 				compr_blocks++;
 				continue;
 			}
+
+			dn->data_blkaddr = NEW_ADDR;
+			f2fs_set_data_blkaddr(dn);
 		}
 
 		to_reserved = cluster_size - compr_blocks - reserved;
@@ -4026,16 +4014,12 @@ static int reserve_compress_blocks(struct dnode_of_data *dn, pgoff_t count)
 			goto next;
 		}
 
-		ret = inc_valid_block_count(sbi, dn->inode, &to_reserved, false);
-		if (unlikely(ret))
+		ret = inc_valid_block_count(sbi, dn->inode, &to_reserved);
+		if (ret)
 			return ret;
 
-		for (i = 0; i < cluster_size; i++, dn->ofs_in_node++) {
-			if (f2fs_data_blkaddr(dn) == NULL_ADDR) {
-				dn->data_blkaddr = NEW_ADDR;
-				f2fs_set_data_blkaddr(dn);
-			}
-		}
+		if (reserved != cluster_size - compr_blocks)
+			return -ENOSPC;
 
 		f2fs_i_compr_blocks_update(dn->inode, compr_blocks, true);
 
