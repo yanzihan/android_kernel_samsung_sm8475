@@ -905,3 +905,5 @@ CONFIG_GAF_V6=y
 
 
 
+
+CONFIG_LOCALVERSION="-YanJiaMian-gki"
