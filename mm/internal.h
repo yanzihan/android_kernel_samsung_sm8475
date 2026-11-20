@@ -676,7 +676,6 @@ static inline struct page *alloc_from_hugepage_pool(gfp_t gfp_mask,
 }
 extern void ___free_pages_ok(struct page *page, unsigned int order,
 		      int __bitwise fpi_flags, bool skip_hugepage_pool);
-						unsigned int alloc_flags);
 void compact_node_async(void);
 #endif
 #endif	/* __MM_INTERNAL_H */
