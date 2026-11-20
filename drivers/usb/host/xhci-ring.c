@@ -250,7 +250,9 @@ static void inc_enq(struct xhci_hcd *xhci, struct xhci_ring *ring,
 		 * AMD 0.96 host, carry over the chain bit of the previous TRB
 		 * (which may mean the chain bit is cleared).
 		 */
-		if (!xhci_link_chain_quirk(xhci, ring->type)) {
+		if (!(ring->type == TYPE_ISOC &&
+		      (xhci->quirks & XHCI_AMD_0x96_HOST)) &&
+		    !xhci_link_trb_quirk(xhci)) {
 			next->link.control &= cpu_to_le32(~TRB_CHAIN);
 			next->link.control |= cpu_to_le32(chain);
 		}
@@ -416,8 +418,9 @@ static int xhci_abort_cmd_ring(struct xhci_hcd *xhci, unsigned long flags)
 	 * In the future we should distinguish between -ENODEV and -ETIMEDOUT
 	 * and try to recover a -ETIMEDOUT with a host controller reset.
 	 */
-	ret = xhci_handshake(&xhci->op_regs->cmd_ring,
-			CMD_RING_RUNNING, 0, 5 * 1000 * 1000);
+	ret = xhci_handshake_check_state(xhci, &xhci->op_regs->cmd_ring,
+			CMD_RING_RUNNING, 0, 5 * 1000 * 1000,
+			XHCI_STATE_REMOVING);
 	if (ret < 0) {
 		xhci_err(xhci, "Abort failed to stop command ring: %d\n", ret);
 		xhci_halt(xhci);
@@ -792,18 +795,21 @@ static void xhci_giveback_urb_in_irq(struct xhci_hcd *xhci,
 	usb_hcd_giveback_urb(hcd, urb, status);
 }
 
-static void xhci_unmap_one_bounce_buffer(struct xhci_hcd *xhci,
-		struct xhci_ring *ring, struct xhci_td *td,
-		struct xhci_segment *seg)
+static void xhci_unmap_td_bounce_buffer(struct xhci_hcd *xhci,
+		struct xhci_ring *ring, struct xhci_td *td)
 {
 	struct device *dev = xhci_to_hcd(xhci)->self.controller;
+	struct xhci_segment *seg = td->bounce_seg;
 	struct urb *urb = td->urb;
 	size_t len;
+
+	if (!ring || !seg || !urb)
+		return;
 
 	if (usb_urb_dir_out(urb)) {
 		dma_unmap_single(dev, seg->bounce_dma, ring->bounce_buf_len,
 				 DMA_TO_DEVICE);
-		goto done;
+		return;
 	}
 
 	dma_unmap_single(dev, seg->bounce_dma, ring->bounce_buf_len,
@@ -819,27 +825,8 @@ static void xhci_unmap_one_bounce_buffer(struct xhci_hcd *xhci,
 		memcpy(urb->transfer_buffer + seg->bounce_offs, seg->bounce_buf,
 		       seg->bounce_len);
 	}
-done:
 	seg->bounce_len = 0;
 	seg->bounce_offs = 0;
-}
-
-static void xhci_unmap_td_bounce_buffer(struct xhci_hcd *xhci,
-		struct xhci_ring *ring, struct xhci_td *td)
-{
-	struct xhci_segment *seg;
-	int i = 0;
-
-	if (!td->bounce_seg || !ring || !td->urb)
-		return;
-
-	/* td->bounce_seg is the last one bounced, unmap them all */
-	for (seg = td->start_seg; i++ < ring->num_segs; seg = seg->next) {
-		if (seg->bounce_len)
-			xhci_unmap_one_bounce_buffer(xhci, ring, td, seg);
-		if (seg == td->bounce_seg)
-			break;
-	}
 }
 
 static int xhci_td_cleanup(struct xhci_hcd *xhci, struct xhci_td *td,
@@ -1052,7 +1039,7 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 					td_to_noop(xhci, ring, cached_td, false);
 					cached_td->cancel_status = TD_CLEARED;
 				}
-				td_to_noop(xhci, ring, td, false);
+
 				td->cancel_status = TD_CLEARING_CACHE;
 				cached_td = td;
 				break;
@@ -1284,15 +1271,12 @@ static void xhci_kill_endpoint_urbs(struct xhci_hcd *xhci,
  */
 void xhci_hc_died(struct xhci_hcd *xhci)
 {
-	bool notify;
 	int i, j;
 
 	if (xhci->xhc_state & XHCI_STATE_DYING)
 		return;
 
-	notify = !(xhci->xhc_state & XHCI_STATE_REMOVING);
-	if (notify)
-		xhci_err(xhci, "xHCI host controller not responding, assume dead\n");
+	xhci_err(xhci, "xHCI host controller not responding, assume dead\n");
 	xhci->xhc_state |= XHCI_STATE_DYING;
 
 	xhci_cleanup_command_queue(xhci);
@@ -1306,7 +1290,7 @@ void xhci_hc_died(struct xhci_hcd *xhci)
 	}
 
 	/* inform usb core hc died if PCI remove isn't already handling it */
-	if (notify)
+	if (!(xhci->xhc_state & XHCI_STATE_REMOVING))
 		usb_hc_died(xhci_to_hcd(xhci));
 }
 
@@ -1584,8 +1568,7 @@ static void xhci_handle_cmd_enable_slot(struct xhci_hcd *xhci, int slot_id,
 		command->slot_id = 0;
 }
 
-static void xhci_handle_cmd_disable_slot(struct xhci_hcd *xhci, int slot_id,
-					u32 cmd_comp_code)
+static void xhci_handle_cmd_disable_slot(struct xhci_hcd *xhci, int slot_id)
 {
 	struct xhci_virt_device *virt_dev;
 	struct xhci_slot_ctx *slot_ctx;
@@ -1600,10 +1583,6 @@ static void xhci_handle_cmd_disable_slot(struct xhci_hcd *xhci, int slot_id,
 	if (xhci->quirks & XHCI_EP_LIMIT_QUIRK)
 		/* Delete default control endpoint resources */
 		xhci_free_device_endpoint_resources(xhci, virt_dev, true);
-	if (cmd_comp_code == COMP_SUCCESS) {
-		xhci->dcbaa->dev_context_ptrs[slot_id] = 0;
-		xhci->devs[slot_id] = NULL;
-	}
 }
 
 static void xhci_handle_cmd_config_ep(struct xhci_hcd *xhci, int slot_id,
@@ -1853,7 +1832,7 @@ static void handle_cmd_completion(struct xhci_hcd *xhci,
 		xhci_handle_cmd_enable_slot(xhci, slot_id, cmd, cmd_comp_code);
 		break;
 	case TRB_DISABLE_SLOT:
-		xhci_handle_cmd_disable_slot(xhci, slot_id, cmd_comp_code);
+		xhci_handle_cmd_disable_slot(xhci, slot_id);
 		break;
 	case TRB_CONFIG_EP:
 		if (!cmd->completion)
@@ -3401,7 +3380,9 @@ static int prepare_ring(struct xhci_hcd *xhci, struct xhci_ring *ep_ring,
 		/* If we're not dealing with 0.95 hardware or isoc rings
 		 * on AMD 0.96 host, clear the chain bit.
 		 */
-		if (!xhci_link_chain_quirk(xhci, ep_ring->type))
+		if (!xhci_link_trb_quirk(xhci) &&
+		    !(ep_ring->type == TYPE_ISOC &&
+		      (xhci->quirks & XHCI_AMD_0x96_HOST)))
 			ep_ring->enqueue->link.control &=
 				cpu_to_le32(~TRB_CHAIN);
 		else
@@ -3808,7 +3789,7 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 						  &trb_buff_len,
 						  ring->enq_seg)) {
 					send_addr = ring->enq_seg->bounce_dma;
-					/* TD bounced at least, and last on this seg */
+					/* assuming TD won't span 2 segs */
 					td->bounce_seg = ring->enq_seg;
 				}
 			}
@@ -4461,18 +4442,11 @@ static int queue_command(struct xhci_hcd *xhci, struct xhci_command *cmd,
 			 u32 field3, u32 field4, bool command_must_succeed)
 {
 	int reserved_trbs = xhci->cmd_ring_reserved_trbs;
-	struct usb_hcd *hcd = xhci_to_hcd(xhci);
 	int ret;
 
 	if ((xhci->xhc_state & XHCI_STATE_DYING) ||
 		(xhci->xhc_state & XHCI_STATE_HALTED)) {
-		xhci_dbg(xhci, "xHCI dying or halted, can't queue_command. state: 0x%x\n",
-			 xhci->xhc_state);
-		return -ESHUTDOWN;
-	}
-
-	if (!HCD_HW_ACCESSIBLE(hcd)) {
-		xhci_warn(xhci, "Can't queue command, xHC not accessible\n");
+		xhci_dbg(xhci, "xHCI dying or halted, can't queue_command\n");
 		return -ESHUTDOWN;
 	}
 
