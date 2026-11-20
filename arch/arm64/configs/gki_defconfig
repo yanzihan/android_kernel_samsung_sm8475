@@ -890,3 +890,75 @@ CONFIG_NLS=y
 
 CONFIG_LOCALVERSION="-YanJiaMian-gki"
 # CONFIG_LOCALVERSION_AUTO is not set
+
+# --- merged from b4q_defconfig ---
+# Disable Werror
+CONFIG_WERROR=n
+
+# Add LOCALVERSION
+CONFIG_LOCALVERSION="-YanJiaMian-gki"
+# CONFIG_LOCALVERSION_AUTO is not set
+
+# Enable TMPFS_XATTR for HybridMount
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_TMPFS_XATTR=y
+
+
+# TCP
+CONFIG_TCP_CONG_ADVANCED=y
+# CONFIG_TCP_CONG_BIC is not set
+# CONFIG_TCP_CONG_WESTWOOD is not set
+# CONFIG_TCP_CONG_HTCP is not set
+CONFIG_TCP_CONG_BBR=y
+CONFIG_DEFAULT_BBR=y
+CONFIG_DEFAULT_TCP_CONG="bbr"
+
+# NET
+# CONFIG_DEFAULT_FQ is not set
+# CONFIG_DEFAULT_FQ_CODEL is not set
+CONFIG_DEFAULT_CAKE=y
+CONFIG_NET_SCH_CAKE=y
+CONFIG_DEFAULT_NET_SCH="cake"
+
+# Selinux Status
+CONFIG_SECURITY_SELINUX_ALWAYS_ENFORCE=y
+# CONFIG_SECURITY_SELINUX_ALWAYS_PERMISSIVE is not set
+
+# Others
+CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y
+# CONFIG_SCHED_CASS is not set
+CONFIG_NOMOUNT=y
+# CONFIG_DIRECT_RECLAIM_FILE_PAGES_ONLY is not set
+# CONFIG_MEMCG_FORCE_USE_VM_SWAPPINESS is not set
+# CONFIG_RELR is not set
+# kallsyms: use absolute addresses (clang21 LTO link layout issue)
+# CONFIG_KALLSYMS_BASE_RELATIVE is not set
+
+# disable kheaders (incbin build issue with this toolchain)
+# CONFIG_IKHEADERS is not set
+
+# Samsung micro-hypervisor protections (RKP/KDP/UH) - required off for KernelSU
+# CONFIG_UH is not set
+# CONFIG_RKP is not set
+# CONFIG_RKP_TEST is not set
+# CONFIG_KDP is not set
+# CONFIG_KDP_CRED is not set
+# CONFIG_KDP_NS is not set
+# CONFIG_KDP_TEST is not set
+
+# --- merged from ksu_defconfig ---
+# KernelSU
+CONFIG_KSU=y
+# --- merged from susfs_defconfig ---
+#SuSFS 2.4.0 full features (official patch)
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_SUS_MAP=y
+CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER=y
