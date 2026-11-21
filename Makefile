@@ -1415,7 +1415,7 @@ $(sort $(vmlinux-deps) $(subdir-modorder)): descend ;
 
 filechk_kernel.release = \
 	echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion \
-		$(srctree) $(GOOGLE_BRANCH) $(KMI_GENERATION))"
+		$(srctree))"
 
 # Store (new) KERNELRELEASE string in include/config/kernel.release
 include/config/kernel.release: FORCE
@@ -2088,7 +2088,7 @@ checkstack:
 
 kernelrelease:
 	@echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion \
-		$(srctree) $(GOOGLE_BRANCH) $(KMI_GENERATION))"
+		$(srctree))"
 
 kernelversion:
 	@echo $(KERNELVERSION)
