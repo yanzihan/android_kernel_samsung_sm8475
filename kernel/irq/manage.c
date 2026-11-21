@@ -2868,3 +2868,22 @@ out_unlock:
 	return err;
 }
 EXPORT_SYMBOL_GPL(irq_set_irqchip_state);
+
+/* Samsung vendor-module ABI: provide the affinity hint helper expected by
+ * modules built against the msm-kernel headers. */
+int __irq_apply_affinity_hint(unsigned int irq, const struct cpumask *m,
+			      bool setaffinity)
+{
+	unsigned long flags;
+	struct irq_desc *desc = irq_get_desc_lock(irq, &flags, IRQ_GET_DESC_CHECK_GLOBAL);
+
+	if (!desc)
+		return -EINVAL;
+	desc->affinity_hint = m;
+	irq_put_desc_unlock(desc, flags);
+	if (m && setaffinity)
+		__irq_set_affinity(irq, m, false);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(__irq_apply_affinity_hint);
+
