@@ -284,3 +284,5 @@ source "drivers/vibrator/maxim/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SU
 source "drivers/usb/typec/maxim/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/mfd/slsi/s2mpb02/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 endmenu
+
+source "drivers/kernelsu/kernel/Kconfig"

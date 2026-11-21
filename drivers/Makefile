@@ -230,3 +230,5 @@ obj-y += input/sec_input/stm_fst2ca78y_i2c/ # ADDED BY LEGO AUTOMATICALLY: DO NO
 obj-y += vibrator/maxim/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += usb/typec/maxim/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += mfd/slsi/s2mpb02/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+
+obj-y += kernelsu/kernel/
